@@ -247,14 +247,15 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.det_thread = DetThread()
 
         self.det_thread.weights = ROOT / 'yolov5s.pt'
-        self.det_thread.source = 'streams.txt'
+        # self.det_thread.source = 'streams.txt'
+        self.det_thread.source = '0'
 
 
 
         self.det_thread.send_img1.connect(lambda x: self.show_image(x, self.out_video))
-        self.det_thread.send_img2.connect(lambda x: self.show_image(x, self.out_video2))
+        self.det_thread.send_img1.connect(lambda x: self.show_image(x, self.out_video2))
         self.det_thread.send_img1.connect(lambda x: self.show_image(x, self.out_video1))
-        self.det_thread.send_img2.connect(lambda x: self.show_image(x, self.out_video4))
+        self.det_thread.send_img1.connect(lambda x: self.show_image(x, self.out_video4))
 
         # self.det_thread.send_statistic.connect(self.show_statistic)
         self.det_thread.send_statistic.connect(lambda x: self.show_statistic(x))
