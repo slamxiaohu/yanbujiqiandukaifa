@@ -31,6 +31,8 @@ import os
 import platform
 import sys
 from pathlib import Path
+import pyautogui
+import cv2
 
 import torch
 
@@ -46,7 +48,6 @@ from utils.general import (LOGGER, Profile, check_file, check_img_size, check_im
                            increment_path, non_max_suppression, print_args, scale_boxes, strip_optimizer, xyxy2xywh)
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, smart_inference_mode
-
 
 
 @smart_inference_mode()
@@ -133,6 +134,9 @@ def run(
         # Second-stage classifier (optional)
         # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
 
+        global im0_resized
+        global im1_resized
+
         # Process predictions
         for i, det in enumerate(pred):  # per image
             seen += 1
@@ -141,7 +145,6 @@ def run(
                 s += f'{i}: '
             else:
                 p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
-
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # im.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
@@ -174,17 +177,39 @@ def run(
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
             # Stream results
+
             im0 = annotator.result()
-            # print(im0)
 
             if view_img:
-                if platform.system() == 'Linux' and p not in windows:
-                    windows.append(p)
-                    cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
-                    cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
-                im1_resized = cv2.resize(im0, (1960, 1000))
-                cv2.imshow(str(p), im1_resized)
-                cv2.waitKey(1)  # 1 millisecond
+                # 选择字体和大小
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 1
+                font_thickness = 2
+
+                # 选择文本的位置
+                text_position = (50, 50)  # (x, y) 坐标，从左上角开始
+
+                # 选择文本的颜色和粗细
+                text_color = (255, 0, 0)  # BGR 格式，这里是红色
+                text_thickness = 2
+
+
+                # if platform.system() == 'Linux' and p not in windows:
+                # windows.append(p)  # 创建窗口，允许调整大小
+                if str(p) == "0":
+                    label_text = "0"
+                    im0_resized = cv2.resize(im0, (960, 1080))
+                    # 在图像上添加文本
+                    cv2.putText(im0_resized, label_text, text_position, font, font_scale, text_color, font_thickness)
+
+                elif str(p) == "1":
+                    label_text = "1"
+                    im1_resized = cv2.resize(im0, (960, 1080))
+                    # 在图像上添加文本
+                    cv2.putText(im1_resized, label_text, text_position, font, font_scale, text_color, font_thickness)
+                    combined_frame = cv2.hconcat([im0_resized, im1_resized])
+                    cv2.imshow("dd", combined_frame)
+                    cv2.waitKey(1)  # 1 millisecond
 
             # Save results (image with detections)
             if save_img:
@@ -216,14 +241,15 @@ def run(
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
     if update:
         strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)
+    # return combined_frame
 
 
-def parse_opt2(index0, index1, index2, index3):
+def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path or triton URL')
-    parser.add_argument('--source', type=str, default="streams.txt", help='file/dir/URL/glob/screen/0(webcam)')
+    parser.add_argument('--source', type=str, default=ROOT / 'data/images', help='file/dir/URL/glob/screen/0(webcam)')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
-    parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640,640], help= 'inference size h,w')
+    parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
@@ -233,38 +259,7 @@ def parse_opt2(index0, index1, index2, index3):
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
     parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
-
-    if int(index0) == 1 and int(index1) == int(index2) == int(index3) == 0:  # 1000
-        parser.add_argument('--classes', nargs='+', type=int, default=0, help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index0) == int(index1) == 1 and int(index2) == int(index3) == 0:  # 1100
-        parser.add_argument('--classes', nargs='+', type=int, default=[0, 1], help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index0) == int(index1) == int(index2) == 1 and int(index3) == 0:  # 1110
-        parser.add_argument('--classes', nargs='+', type=int, default=[0, 1, 2], help= 'filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index1) == 1 and int(index0) == int(index2) == int(index3) == 0:  # 0100
-        parser.add_argument('--classes', nargs='+', type=int, default=1, help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index2) == 1 and int(index0) == int(index1) == int(index3) == 0:  # 0010
-        parser.add_argument('--classes', nargs='+', type=int, default=2, help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index3) == 1 and int(index0) == int(index1) == int(index2) == 0:  # 0001
-        parser.add_argument('--classes', nargs='+', type=int, default=3, help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index1) == int(index2) == 1 and int(index0) == int(index3) == 0:  # 0110
-        parser.add_argument('--classes', nargs='+', type=int, default=[1, 2], help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index2) == int(index3) == 1 and int(index0) == int(index1) == 0:  # 0011
-        parser.add_argument('--classes', nargs='+', type=int, default=[2, 3], help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index0) == int(index2) == 1 and int(index1) == int(index3) == 0:  # 1010
-        parser.add_argument('--classes', nargs='+', type=int, default=[0, 2], help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index0) == int(index3) == 1 and int(index1) == int(index2) == 0:  # 1001
-        parser.add_argument('--classes', nargs='+', type=int, default=[0, 3], help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index1) == int(index3) == 1 and int(index0) == int(index2) == 0:  # 0101
-        parser.add_argument('--classes', nargs='+', type=int, default=[1, 3], help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index1) == int(index2) == int(index3) == 1 and int(index0) == 0:  # 0111
-        parser.add_argument('--classes', nargs='+', type=int, default=[1, 2, 3], help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index0) == int(index2) == int(index3) == 1 and int(index1) == 0:  # 1011
-        parser.add_argument('--classes', nargs='+', type=int, default=[0, 2, 3], help='filter by class: --classes 0, or --classes 0 2 3')
-    elif int(index0) == int(index1) == int(index3) == 1 and int(index2) == 0:  # 1101
-        parser.add_argument('--classes', nargs='+', type=int, default=[0, 1, 3], help='filter by class: --classes 0, or --classes 0 2 3')
-    else:  # 0000 1111
-        parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
-
+    parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--visualize', action='store_true', help='visualize features')
@@ -278,7 +273,6 @@ def parse_opt2(index0, index1, index2, index3):
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--vid-stride', type=int, default=1, help='video frame-rate stride')
-
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(vars(opt))
@@ -291,5 +285,5 @@ def main(opt):
 
 
 if __name__ == "__main__":
-    opt = parse_opt2(list)
+    opt = parse_opt()
     main(opt)
